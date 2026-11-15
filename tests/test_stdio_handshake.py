@@ -60,6 +60,7 @@ EXPECTED_TOOLS = {
     "Scrape",
     "Screenshot",
     "Scroll",
+    "Sequence",
     "Shortcut",
     "Snapshot",
     "Type",

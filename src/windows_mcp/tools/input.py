@@ -428,7 +428,7 @@ def register(
 
     @mcp.tool(
         name="Wait",
-        description="Pauses execution for specified duration in seconds. Use when waiting for: applications to launch/load, UI animations to complete, page content to render, dialogs to appear, or between rapid actions. Helps ensure UI is ready before next interaction.",
+        description="Pauses execution for specified duration in seconds (supports fractional seconds such as 0.2). Use when waiting for: applications to launch/load, UI animations to complete, page content to render, dialogs to appear, or between rapid actions. Helps ensure UI is ready before next interaction.",
         annotations=ToolAnnotations(
             title="Wait",
             readOnlyHint=True,
@@ -438,7 +438,10 @@ def register(
         ),
     )
     @with_analytics(get_analytics(), "Wait-Tool")
-    def wait_tool(duration: int, ctx: Context = None) -> str:
+    def wait_tool(duration: float, ctx: Context = None) -> str:
+        _validate_finite_number(duration, "duration")
+        if duration < 0 or duration > 300:
+            raise ValueError("duration must be between 0 and 300 seconds")
         time.sleep(duration)
         return f"Waited for {duration} seconds."
 
@@ -468,44 +471,67 @@ def register(
         use_dom: bool | str = False,
         ctx: Context = None,
     ) -> str:
-        normalized = _validate_wait_for_args(
+        return execute_wait_for(
+            get_desktop(),
             condition=condition,
             text=text,
             window_name=window_name,
             timeout=timeout,
             interval=interval,
+            use_dom=use_dom,
         )
-        desktop = get_desktop()
-        use_dom_bool = _as_bool(use_dom, "use_dom")
-        started_at = time.monotonic()
-        deadline = started_at + timeout
-        attempts = 0
-        last_detail = "condition was not evaluated"
 
-        while True:
-            attempts += 1
-            desktop_state = desktop.get_state(
-                use_vision=False,
-                use_dom=use_dom_bool,
-                use_ui_tree=True,
-                use_annotation=False,
-            )
-            matched, last_detail = _matches_wait_condition(
-                desktop_state=desktop_state,
-                condition=normalized,
-                text=text,
-                window_name=window_name,
-            )
-            if matched:
-                elapsed = time.monotonic() - started_at
-                return (
-                    f"WaitFor condition '{normalized}' satisfied after "
-                    f"{elapsed:.2f}s and {attempts} attempt(s): {last_detail}."
-                )
 
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise TimeoutError(
-                    f"Timed out after {timeout:.2f}s waiting for '{normalized}': {last_detail}."
-                )
-            time.sleep(min(interval, remaining))
+def execute_wait_for(
+    desktop: Any,
+    *,
+    condition: str,
+    text: str | None = None,
+    window_name: str | None = None,
+    timeout: float = 10.0,
+    interval: float = 0.25,
+    use_dom: bool | str = False,
+    checkpoint: Callable[[], None] | None = None,
+) -> str:
+    normalized = _validate_wait_for_args(
+        condition=condition,
+        text=text,
+        window_name=window_name,
+        timeout=timeout,
+        interval=interval,
+    )
+    use_dom_bool = _as_bool(use_dom, "use_dom")
+    started_at = time.monotonic()
+    deadline = started_at + timeout
+    attempts = 0
+    last_detail = "condition was not evaluated"
+
+    while True:
+        if checkpoint is not None:
+            checkpoint()
+        attempts += 1
+        desktop_state = desktop.get_state(
+            use_vision=False,
+            use_dom=use_dom_bool,
+            use_ui_tree=True,
+            use_annotation=False,
+        )
+        matched, last_detail = _matches_wait_condition(
+            desktop_state=desktop_state,
+            condition=normalized,
+            text=text,
+            window_name=window_name,
+        )
+        if matched:
+            elapsed = time.monotonic() - started_at
+            return (
+                f"WaitFor condition '{normalized}' satisfied after "
+                f"{elapsed:.2f}s and {attempts} attempt(s): {last_detail}."
+            )
+
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError(
+                f"Timed out after {timeout:.2f}s waiting for '{normalized}': {last_detail}."
+            )
+        time.sleep(min(interval, remaining))

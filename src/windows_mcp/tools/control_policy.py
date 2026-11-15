@@ -5,7 +5,7 @@ omissions; unclassified extensions conservatively retain the desktop gate.
 """
 
 # Categories describe desktop interference, not whether an operation is destructive.
-DIRECT = frozenset({"Click", "Type", "Scroll", "Move", "Shortcut", "MultiSelect", "MultiEdit"})
+DIRECT = frozenset({"Click", "Type", "Scroll", "Move", "Shortcut", "MultiSelect", "MultiEdit", "Sequence"})
 POSSIBLE = frozenset({"PowerShell", "Notification"})
 OTHER = frozenset(
     {

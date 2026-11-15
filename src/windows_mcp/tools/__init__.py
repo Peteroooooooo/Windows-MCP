@@ -12,6 +12,7 @@ from windows_mcp.tools import (
     process,
     registry,
     scrape,
+    sequence,
     shell,
     snapshot,
 )
@@ -26,6 +27,7 @@ _MODULES = [
     input,
     scrape,
     multi,
+    sequence,
     clipboard,
     process,
     notification,

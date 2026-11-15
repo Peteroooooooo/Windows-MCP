@@ -855,13 +855,13 @@ class Desktop:
 
     def type(
         self,
-        loc: tuple[int, int],
+        loc: tuple[int, int] | list[int] | None,
         text: str,
         caret_position: Literal["start", "idle", "end"] = "idle",
         clear: bool | str = False,
         press_enter: bool | str = False,
     ) -> str:
-        """Click a field, optionally empty it, type the text and report what landed.
+        """Click a field (when loc is given) or type into the focused control, and report what landed.
 
         Returns a short note for the tool's answer: how the field was cleared and
         what it reads back, when the focused element exposes its text.
@@ -870,17 +870,18 @@ class Desktop:
         press_enter = as_bool(press_enter, "press_enter")
         owner = get_controller()
         owner.checkpoint_current()
-        x, y = loc
-        self._validate_screen_point(x, y)
-        uia.Click(x, y)
-        owner.record_step_current()
+        if loc is not None:
+            x, y = loc
+            self._validate_screen_point(x, y)
+            uia.Click(x, y)
+            owner.record_step_current()
         if caret_position in ("start", "end"):
             key = "{Home}" if caret_position == "start" else "{End}"
             # In a multi-line field Home and End stop at the ends of the clicked
             # line; Ctrl+Home and Ctrl+End reach the start and end of the text.
             # Ctrl+End means something else in a grid or list, so only use it
             # once the focused element is the multi-line one that was clicked.
-            field = self._focused_element_at(x, y)
+            field = self._focused_element_at(loc[0], loc[1]) if loc is not None else self._focused_control()
             if field is not None and self._is_multiline(field):
                 key = "{Ctrl}" + key
             owner.checkpoint_current()
@@ -889,7 +890,7 @@ class Desktop:
         notes: list[str] = []
         target = None
         if clear:
-            sleep(0.5)
+            sleep(0.5 if loc is not None else 0.15)
             target = self._focused_control()
             notes.append(self._clear_field(target))
         # Per-key SendKeys for short text (so escape sequences keep working);

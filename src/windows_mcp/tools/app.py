@@ -68,6 +68,36 @@ def _launch_executable(
     )
 
 
+def execute_app(
+    desktop,
+    *,
+    mode: Literal["launch", "launch_executable", "resize", "switch"] = "launch",
+    name: str | None = None,
+    window_loc: list[int] | str | None = None,
+    window_size: list[int] | str | None = None,
+    executable: str | None = None,
+    args: list[str] | str | None = None,
+    cwd: str | None = None,
+) -> str:
+    exact_launch_inputs = (executable, args, cwd)
+    if mode != "launch_executable" and any(value is not None for value in exact_launch_inputs):
+        raise ValueError('executable, args, and cwd require mode="launch_executable"')
+
+    if mode == "launch_executable":
+        if executable is None:
+            raise ValueError('executable is required for mode="launch_executable"')
+        if name is not None or window_loc is not None or window_size is not None:
+            raise ValueError(
+                "name, window_loc, and window_size are not supported for "
+                'mode="launch_executable"'
+            )
+        return _launch_executable(executable, args, cwd)
+
+    window_loc = _as_int_list(window_loc, "window_loc")
+    window_size = _as_int_list(window_size, "window_size")
+    return desktop.app(mode, name, window_loc, window_size)
+
+
 def register(mcp, *, get_desktop, get_analytics):
     @mcp.tool(
         name="App",
@@ -97,20 +127,13 @@ def register(mcp, *, get_desktop, get_analytics):
         cwd: str | None = None,
         ctx: Context = None,
     ):
-        exact_launch_inputs = (executable, args, cwd)
-        if mode != "launch_executable" and any(value is not None for value in exact_launch_inputs):
-            raise ValueError('executable, args, and cwd require mode="launch_executable"')
-
-        if mode == "launch_executable":
-            if executable is None:
-                raise ValueError('executable is required for mode="launch_executable"')
-            if name is not None or window_loc is not None or window_size is not None:
-                raise ValueError(
-                    "name, window_loc, and window_size are not supported for "
-                    'mode="launch_executable"'
-                )
-            return _launch_executable(executable, args, cwd)
-
-        window_loc = _as_int_list(window_loc, "window_loc")
-        window_size = _as_int_list(window_size, "window_size")
-        return get_desktop().app(mode, name, window_loc, window_size)
+        return execute_app(
+            get_desktop(),
+            mode=mode,
+            name=name,
+            window_loc=window_loc,
+            window_size=window_size,
+            executable=executable,
+            args=args,
+            cwd=cwd,
+        )
