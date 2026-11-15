@@ -106,7 +106,8 @@ def register(mcp, *, get_desktop, get_analytics):
             "application, window, foreground, focus, resize. Four modes: 'launch' (opens an application "
             "by Start Menu name), 'launch_executable' (strictly launches one executable path with separated "
             "argv and optional cwd), 'resize' (adjusts a named or active window), and 'switch' (brings a "
-            "specific window into focus). Prefer background execution when supported. If launching an application is known to take focus or disrupt the user, obtain permission first, reusing existing authorization. Relaxed policy does not gate launch modes; this guidance is not server-enforced approval."
+            "specific window into focus). For multi-step flows (launch/switch followed by wait_for/shortcuts/typing), "
+            "prefer using 'app' steps directly inside Sequence. Prefer background execution when supported. If launching an application is known to take focus or disrupt the user, obtain permission first, reusing existing authorization. Relaxed policy does not gate launch modes; this guidance is not server-enforced approval."
         ),
         annotations=ToolAnnotations(
             title="App",

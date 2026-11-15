@@ -208,7 +208,15 @@ def build_snapshot_response(
             f"{display.bounding_box.xyxy_to_string()}{primary}"
         )
 
+    from windows_mcp import uia
+
     metadata_text = f"Cursor Position: {desktop_state.cursor_position}\n"
+    clip = uia.GetActiveClipBounds()
+    if clip is not None:
+        metadata_text += (
+            f"Cursor Clip Active: ({clip[0]},{clip[1]},{clip[2]},{clip[3]}) — "
+            "OS cursor movement is locked to this rectangle; pointer actions outside it will fail/clamp.\n"
+        )
     if desktop_state.screenshot_original_size:
         orig = desktop_state.screenshot_original_size
         scale = desktop_state.screenshot_scale or 1.0

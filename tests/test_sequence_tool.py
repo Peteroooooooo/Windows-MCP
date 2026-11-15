@@ -299,3 +299,70 @@ def test_sequence_defaults_to_no_final_capture(monkeypatch) -> None:
     assert capture_called is False
     assert len(result) == 1
     assert "Sequence completed 1/1 step(s)" in result[0]
+
+
+def test_sequence_wait_for_active_window_skips_ui_tree() -> None:
+    desktop = MagicMock()
+    desktop.get_state.return_value = _state("Notepad")
+    seq = _register_seq(desktop)
+
+    result = asyncio.run(
+        seq(
+            steps=[
+                {
+                    "action": "wait_for",
+                    "condition": "active_window",
+                    "window_name": "Notepad",
+                    "use_dom": True,
+                }
+            ],
+            final_capture="none",
+        )
+    )
+
+    assert "Sequence completed 1/1 step(s)" in result[0]
+    desktop.get_state.assert_called_once_with(
+        use_vision=False,
+        use_dom=False,
+        use_ui_tree=False,
+        use_annotation=False,
+    )
+
+
+def test_validate_screen_point_rejects_outside_active_clip_bounds(monkeypatch) -> None:
+    real_rect = (0, -666, 4000, 2560)
+    monkeypatch.setattr("windows_mcp.desktop.service.uia.GetVirtualScreenRect", lambda: real_rect)
+    monkeypatch.setattr("windows_mcp.desktop.service.uia.RealVirtualScreenRect", lambda: real_rect)
+    monkeypatch.setattr(
+        "windows_mcp.desktop.service.uia.GetActiveClipBounds",
+        lambda: (2560, -666, 4000, 1894),
+    )
+
+    Desktop._validate_screen_point(2700, 200)
+    with pytest.raises(ValueError, match="active OS ClipCursor bounds"):
+        Desktop._validate_screen_point(650, 409)
+
+
+def test_sequence_tool_description_documents_wait_for_conditions() -> None:
+    mcp = FakeMCP()
+    captured: dict[str, str] = {}
+
+    def capture_tool(*, name: str, description: str = "", **kwargs: object) -> Callable:
+        def decorator(func: Callable) -> Callable:
+            captured[name] = description
+            return func
+
+        return decorator
+
+    mcp.tool = capture_tool  # type: ignore[method-assign]
+    register_sequence(mcp, get_desktop=lambda: MagicMock(), get_analytics=lambda: None)
+    desc = captured["Sequence"]
+    for cond in (
+        "text_exists",
+        "active_window",
+        "element_exists",
+        "element_enabled",
+        "focused_element",
+    ):
+        assert cond in desc
+

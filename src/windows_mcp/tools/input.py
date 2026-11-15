@@ -221,7 +221,8 @@ def register(
     @mcp.tool(
         name="Click",
         description=(
-            "Performs mouse clicks at specified coordinates [x, y] or passing a UI element's label/id. "
+            "Performs a single mouse click at coordinates [x, y] or a UI element's label/id. "
+            "For 2+ chained actions (e.g. click then type, multi-click flow, or click + wait), prefer Sequence in one call. "
             "Supports button types: 'left' for selection/activation, 'right' for context menus, 'middle'. "
             "Supports clicks: 0=hover only (no click), 1=single click (select/focus), 2=double click (open/activate). "
             "Provide either loc or label."
@@ -263,7 +264,7 @@ def register(
 
     @mcp.tool(
         name="Type",
-        description="Types text at specified coordinates [x, y] or passing a UI element's label/id. Set clear=True to clear existing text first (Home, Shift+End, Backspace; never Ctrl+A, which many apps treat as 'mark every record'), False to append. The answer says how the field was cleared and what it reads back when the field exposes its text, and warns when focus moved away while typing (e.g. a message box took the keystrokes). Set press_enter=True to submit after typing. Set caret_position to 'start' or 'end' to type at the beginning or end of the field (Home/End; Ctrl+Home/Ctrl+End when the clicked field is a document or a native multi-line edit box, so the whole text rather than the clicked line), or 'idle' (default) to type where the click put the caret. Provide either loc or label. clear and press_enter accept only true or false. An empty text types nothing, so combine it with clear=True to just empty a field.",
+        description="Types text at coordinates [x, y] or a UI element's label/id. For 2+ chained actions (e.g. type + click, shortcut + type, or filling a form), prefer Sequence in one call (Sequence also lets you omit loc/label to type into the currently focused control). Set clear=True to clear existing text first (Home, Shift+End, Backspace; never Ctrl+A, which many apps treat as 'mark every record'), False to append. The answer says how the field was cleared and what it reads back when the field exposes its text, and warns when focus moved away while typing (e.g. a message box took the keystrokes). Set press_enter=True to submit after typing. Set caret_position to 'start' or 'end' to type at the beginning or end of the field (Home/End; Ctrl+Home/Ctrl+End when the clicked field is a document or a native multi-line edit box, so the whole text rather than the clicked line), or 'idle' (default) to type where the click put the caret. Provide either loc or label. clear and press_enter accept only true or false. An empty text types nothing, so combine it with clear=True to just empty a field.",
         annotations=ToolAnnotations(
             title="Type",
             readOnlyHint=False,
@@ -412,7 +413,7 @@ def register(
 
     @mcp.tool(
         name="Shortcut",
-        description='Executes keyboard shortcuts using key combinations separated by +. Examples: "ctrl+c" (copy), "ctrl+v" (paste), "alt+tab" (switch apps), "win+r" (Run dialog), "win" (Start menu), "ctrl+shift+esc" (Task Manager). Use for quick actions and system commands.',
+        description='Executes a single keyboard shortcut using key combinations separated by +. Examples: "ctrl+c" (copy), "ctrl+v" (paste), "alt+tab" (switch apps), "win+r" (Run dialog), "win" (Start menu), "ctrl+shift+esc" (Task Manager). For 2+ chained actions (e.g. ctrl+l then typing a URL, or ctrl+t then wait), prefer Sequence in one call.',
         annotations=ToolAnnotations(
             title="Shortcut",
             readOnlyHint=False,
@@ -428,7 +429,7 @@ def register(
 
     @mcp.tool(
         name="Wait",
-        description="Pauses execution for specified duration in seconds (supports fractional seconds such as 0.2). Use when waiting for: applications to launch/load, UI animations to complete, page content to render, dialogs to appear, or between rapid actions. Helps ensure UI is ready before next interaction.",
+        description="Pauses execution for specified duration in seconds (supports fractional seconds such as 0.2). For waiting between actions in a multi-step flow, prefer embedding 'wait' or 'wait_for' steps inside Sequence instead of separate Wait calls.",
         annotations=ToolAnnotations(
             title="Wait",
             readOnlyHint=True,
@@ -448,10 +449,10 @@ def register(
     @mcp.tool(
         name="WaitFor",
         description=(
-            "Waits until a UI condition is satisfied, polling the Windows accessibility tree "
-            "inside the tool to avoid repeated Snapshot calls. Conditions: text_exists, "
-            "active_window, element_exists, element_enabled, focused_element. Provide text "
-            "and/or window_name depending on the condition. Set use_dom=True for browser DOM text."
+            "Waits until a UI condition is satisfied, polling inside a single call to avoid repeated "
+            "Snapshot calls. Conditions: text_exists, active_window, element_exists, element_enabled, "
+            "focused_element. Provide text and/or window_name depending on the condition. Set use_dom=True "
+            "for browser DOM text. Can also be embedded directly as a 'wait_for' step inside Sequence."
         ),
         annotations=ToolAnnotations(
             title="WaitFor",
@@ -510,10 +511,11 @@ def execute_wait_for(
         if checkpoint is not None:
             checkpoint()
         attempts += 1
+        use_ui_tree = normalized != "active_window"
         desktop_state = desktop.get_state(
             use_vision=False,
-            use_dom=use_dom_bool,
-            use_ui_tree=True,
+            use_dom=use_dom_bool if use_ui_tree else False,
+            use_ui_tree=use_ui_tree,
             use_annotation=False,
         )
         matched, last_detail = _matches_wait_condition(

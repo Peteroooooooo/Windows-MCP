@@ -789,6 +789,16 @@ class Desktop:
                 f"Coordinates ({x},{y}) are outside the desktop bounds "
                 f"x={left}..{right}, y={top}..{bottom}"
             )
+        if (left, top, width, height) == uia.RealVirtualScreenRect():
+            clip = uia.GetActiveClipBounds()
+            if clip is not None:
+                c_left, c_top, c_right, c_bottom = clip
+                if not (c_left <= x < c_right and c_top <= y < c_bottom):
+                    raise ValueError(
+                        f"Coordinates ({x},{y}) are outside the active OS ClipCursor bounds "
+                        f"x={c_left}..{c_right - 1}, y={c_top}..{c_bottom - 1}. "
+                        "Move the target window inside those bounds or release the cursor lock."
+                    )
 
     @staticmethod
     def _modal_dialog_warning(x: int, y: int) -> str:

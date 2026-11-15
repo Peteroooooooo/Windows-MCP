@@ -663,8 +663,8 @@ def GetVirtualScreenSize() -> Tuple[int, int]:
     return w, h
 
 
-def GetVirtualScreenRect() -> Tuple[int, int, int, int]:
-    """Returns (left, top, width, height) of the virtual screen."""
+def RealVirtualScreenRect() -> Tuple[int, int, int, int]:
+    """Returns unmockable Win32 (left, top, width, height) of the virtual screen."""
     SM_XVIRTUALSCREEN = 76
     SM_YVIRTUALSCREEN = 77
     SM_CXVIRTUALSCREEN = 78
@@ -675,6 +675,35 @@ def GetVirtualScreenRect() -> Tuple[int, int, int, int]:
         ctypes.windll.user32.GetSystemMetrics(SM_CXVIRTUALSCREEN),
         ctypes.windll.user32.GetSystemMetrics(SM_CYVIRTUALSCREEN),
     )
+
+
+def GetVirtualScreenRect() -> Tuple[int, int, int, int]:
+    """Returns (left, top, width, height) of the virtual screen."""
+    return RealVirtualScreenRect()
+
+
+def GetClipCursorRect() -> Tuple[int, int, int, int] | None:
+    """Returns active Win32 GetClipCursor (left, top, right, bottom), or None on failure."""
+    rect = ctypes.wintypes.RECT()
+    if not ctypes.windll.user32.GetClipCursor(ctypes.byref(rect)):
+        return None
+    return int(rect.left), int(rect.top), int(rect.right), int(rect.bottom)
+
+
+def GetActiveClipBounds() -> Tuple[int, int, int, int] | None:
+    """Returns (left, top, right, bottom) when OS ClipCursor restricts the virtual desktop."""
+    clip = GetClipCursorRect()
+    if clip is None:
+        return None
+    left, top, width, height = RealVirtualScreenRect()
+    v_right = left + width
+    v_bottom = top + height
+    c_left, c_top, c_right, c_bottom = clip
+    if c_right <= c_left or c_bottom <= c_top:
+        return None
+    if c_left > left or c_top > top or c_right < v_right or c_bottom < v_bottom:
+        return clip
+    return None
 
 
 @dataclass(frozen=True)

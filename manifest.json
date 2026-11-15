@@ -149,7 +149,7 @@
     },
     {
       "name": "Sequence",
-      "description": "Executes an ordered sequence of desktop actions (app, click, type, move, scroll, shortcut, wait, wait_for, clipboard) in a single tool call with optional final screenshot or snapshot."
+      "description": "Preferred batch tool: executes up to 50 desktop/browser actions (app, click, type, move, scroll, shortcut, wait, wait_for, clipboard) in one call with optional final screenshot or snapshot."
     },
     {
       "name": "Clipboard",

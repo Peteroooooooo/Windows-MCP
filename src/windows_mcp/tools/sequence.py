@@ -425,19 +425,20 @@ def register(mcp, *, get_desktop, get_analytics):
     @mcp.tool(
         name="Sequence",
         description=(
-            "Executes an ordered sequence of desktop actions in a single tool call to avoid "
-            "multi-turn round-trip latency. Supports up to 50 steps with actions: "
-            "'app' (mode, name/executable, window_loc, window_size), "
-            "'click' (loc or label, button, clicks), "
-            "'type' (text; optional loc/label — omit both to type into the currently focused control; clear, caret_position, press_enter), "
-            "'move' (loc or label, drag, from_loc, duration), "
-            "'scroll' (optional loc/label, type, direction, wheel_times), "
-            "'shortcut' (shortcut, e.g. 'ctrl+t'), "
-            "'wait' (duration/seconds as float, e.g. 0.2), "
-            "'wait_for' (condition, text, window_name, timeout, interval, use_dom), and "
+            "PREFER THIS TOOL whenever chaining 2+ desktop or browser actions — executes up to 50 "
+            "steps in a single MCP call to eliminate multi-turn LLM round-trip latency. Supported actions: "
+            "'app' (mode='launch'|'launch_executable'|'resize'|'switch', name/executable, args, cwd, window_loc, window_size), "
+            "'click' (loc=[x,y] or label, button, clicks), "
+            "'type' (text; optional loc=[x,y]/label — omit both to type into the currently focused control; clear, caret_position, press_enter), "
+            "'move' (loc=[x,y] or label, drag, from_loc, duration), "
+            "'scroll' (optional loc=[x,y]/label, type, direction, wheel_times), "
+            "'shortcut' (shortcut, e.g. 'ctrl+t', 'ctrl+l', 'ctrl+v'), "
+            "'wait' (duration/seconds as float, e.g. 0.15), "
+            "'wait_for' (condition in {'text_exists','active_window','element_exists','element_enabled','focused_element'}, text, window_name, timeout, interval, use_dom — 'active_window' skips UI tree traversal and is ultra-fast), and "
             "'clipboard' (mode='get'|'set', text). "
-            "All steps are validated before execution starts. Set final_capture to 'none' (default, fastest; combine with 'wait_for' to verify state without image overhead), "
-            "'screenshot' (fast visual verification — pass capture_display=[0] or capture_region on multi-monitor setups to avoid oversized images), or 'snapshot' (full UI tree + screenshot)."
+            "Tips: pass loc=[x,y] directly from Snapshot text output; start coordinate clicks with app(mode='switch') or wait_for(condition='active_window') if focus is not guaranteed. "
+            "All steps are validated before execution starts. Set final_capture='none' (default, fastest; verify via wait_for or type read-back), "
+            "'screenshot' (fast visual verification — pass capture_display=[0] or capture_region=[l,t,r,b] on multi-monitor setups), or 'snapshot' (full UI tree + screenshot)."
         ),
         annotations=ToolAnnotations(
             title="Sequence",

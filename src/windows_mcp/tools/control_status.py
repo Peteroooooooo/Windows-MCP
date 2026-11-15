@@ -2,6 +2,7 @@
 
 from mcp.types import ToolAnnotations
 
+from windows_mcp import uia
 from windows_mcp.desktop.control import get_controller
 from windows_mcp.infrastructure.thread_affinity import uia_worker_status
 
@@ -22,8 +23,12 @@ def register(mcp, *, get_desktop, get_analytics):
         controller = get_controller()
         status = controller.release() if release else controller.status()
         worker = uia_worker_status()
-        return {
+        result = {
             **status,
             "ui_busy": worker["busy"],
             "uia_worker": worker,
         }
+        clip = uia.GetActiveClipBounds()
+        if clip is not None:
+            result["clip_cursor"] = list(clip)
+        return result

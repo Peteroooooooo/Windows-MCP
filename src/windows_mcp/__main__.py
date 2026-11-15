@@ -73,6 +73,12 @@ _control_notifier: Any | None = None
 instructions = dedent("""
 Windows MCP server provides tools to interact directly with the Windows desktop,
 thus enabling to operate the desktop on the user's behalf.
+
+Speed & tool-selection rules:
+1. Prefer `Sequence` for any workflow with 2+ predictable steps (launching/switching apps, shortcuts like ctrl+t/ctrl+l, clicking, typing, scrolling, fractional waits, wait_for, clipboard get/set). Pack all deterministic steps into ONE `Sequence` call instead of making separate Click/Type/Shortcut/Wait calls — this eliminates multi-turn round-trip latency.
+2. Skip unnecessary `Snapshot` calls: if the target app, shortcut, or coordinates are already known, start directly with `Sequence` or `Screenshot` rather than capturing a full UI tree first. Reserve `Snapshot` (with `use_dom=True` for browser pages) for discovering unknown element coordinates.
+3. Keep `Sequence` `final_capture="none"` (default) when `wait_for` or `type` read-back already verifies the state. When visual verification is needed on multi-monitor setups, pass `final_capture="screenshot"` with `capture_display=[0]` or `capture_region=[left, top, right, bottom]`.
+4. In `Sequence`: `type` can omit `loc`/`label` to type into the currently focused control; `loc=[x, y]` from `Snapshot` text output works directly without needing numeric labels; anchor coordinate clicks with `app(mode="switch")` or `wait_for(condition="active_window")` when window focus might have changed; valid `wait_for` conditions are `text_exists`, `active_window`, `element_exists`, `element_enabled`, `focused_element`.
 """)
 
 
