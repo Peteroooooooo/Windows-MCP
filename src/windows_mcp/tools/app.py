@@ -1,7 +1,9 @@
 """App tool — launch, resize, switch applications."""
 
 import json
+import os
 import subprocess
+import winreg
 from pathlib import Path
 from typing import Literal
 
@@ -23,8 +25,56 @@ def _as_args(value: list[str] | str | None) -> list[str]:
     return args
 
 
+def _resolve_from_path(command: str) -> Path | None:
+    path_env = os.environ.get("PATH", "")
+    if not path_env:
+        return None
+    pathext = [
+        ext for ext in (os.environ.get("PATHEXT") or ".COM;.EXE;.BAT;.CMD").split(os.pathsep) if ext
+    ]
+    lower_cmd = command.lower()
+    candidates = [command] if any(lower_cmd.endswith(ext.lower()) for ext in pathext) else []
+    candidates.extend(command + ext for ext in pathext)
+    for directory in path_env.split(os.pathsep):
+        if not directory or directory == ".":
+            continue
+        dir_path = Path(directory)
+        for name in candidates:
+            candidate = dir_path / name
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return candidate.resolve()
+    return None
+
+
+def _resolve_from_app_paths(command: str) -> Path | None:
+    subkey_base = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"
+    names = [command] if command.lower().endswith(".exe") else [f"{command}.exe", command]
+    for root in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        for name in names:
+            try:
+                with winreg.OpenKey(root, f"{subkey_base}\\{name}") as key:
+                    raw_value, _ = winreg.QueryValueEx(key, None)
+            except OSError:
+                continue
+            if not isinstance(raw_value, str) or not raw_value.strip():
+                continue
+            expanded = os.path.expandvars(raw_value.strip().strip('"'))
+            candidate = Path(expanded).expanduser()
+            if candidate.is_file():
+                return candidate.resolve()
+    return None
+
+
 def _resolve_executable(executable: str) -> Path:
-    path = Path(executable).expanduser().resolve()
+    stripped = executable.strip()
+    if not stripped:
+        raise ValueError("Executable path must not be empty")
+    has_path_hint = any(sep in stripped for sep in ("/", "\\", ":")) or stripped.startswith((".", "~"))
+    if not has_path_hint:
+        found = _resolve_from_path(stripped) or _resolve_from_app_paths(stripped)
+        if found is not None:
+            return found
+    path = Path(stripped).expanduser().resolve()
     if not path.is_file():
         raise ValueError(f"Executable does not exist: {path}")
     return path

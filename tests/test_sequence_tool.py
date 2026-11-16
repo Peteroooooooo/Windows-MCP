@@ -366,3 +366,30 @@ def test_sequence_tool_description_documents_wait_for_conditions() -> None:
     ):
         assert cond in desc
 
+
+def test_wait_for_active_window_uses_fast_desktop_title_helper() -> None:
+    class FastTitleDesktop:
+        def get_active_window_name(self) -> str:
+            return "无标题 - Notepad"
+
+        def get_state(self, **_kw: object) -> object:
+            raise AssertionError("get_state should not be called when get_active_window_name exists")
+
+    seq = _register_seq(FastTitleDesktop())
+    result = asyncio.run(
+        seq(
+            steps=[
+                {
+                    "action": "wait_for",
+                    "condition": "active_window",
+                    "window_name": "Notepad",
+                }
+            ],
+            final_capture="none",
+        )
+    )
+
+    assert "Sequence completed 1/1 step(s)" in result[0]
+    assert "无标题 - Notepad" in result[0]
+
+

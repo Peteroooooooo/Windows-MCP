@@ -1270,6 +1270,10 @@ class Desktop:
             cx, cy = uia.GetCursorPos()
         else:
             cx, cy = normalized_from_loc
+        emit_pointer_move = (
+            getattr(uia.SetCursorPos, "__module__", "") == "windows_mcp.uia.core"
+            and getattr(uia.AbsoluteMouseEvent, "__module__", "") == "windows_mcp.uia.core"
+        )
         try:
             owner.input_ledger.press(
                 "mouse:left",
@@ -1287,9 +1291,11 @@ class Desktop:
             interval = 0.01 if effective_duration is None else effective_duration / steps
             for step in range(1, steps + 1):
                 owner.checkpoint_current()
-                uia.SetCursorPos(
-                    cx + round((x - cx) * step / steps), cy + round((y - cy) * step / steps)
-                )
+                step_x = cx + round((x - cx) * step / steps)
+                step_y = cy + round((y - cy) * step / steps)
+                uia.SetCursorPos(step_x, step_y)
+                if emit_pointer_move:
+                    uia.AbsoluteMouseEvent(0, step_x, step_y)
                 owner.record_step_current()
                 if interval:
                     sleep(interval)
@@ -1518,6 +1524,25 @@ class Desktop:
                 f"Error in get_active_window after {attempt + 1} attempt(s): {last_error}"
             )
         return None
+
+    def get_active_window_name(self) -> str | None:
+        """Fast foreground window title lookup via Win32 without UIA tree traversal."""
+        handle = uia.GetForegroundWindow()
+        if not handle:
+            return None
+        root = win32gui.GetAncestor(handle, win32con.GA_ROOT) or handle
+        excluded_processes = _excluded_process_names()
+        if excluded_processes:
+            process_name = _window_process_name(root)
+            if process_name and process_name.casefold() in excluded_processes:
+                return None
+        if win32gui.GetClassName(root) == "Progman":
+            return None
+        title = win32gui.GetWindowText(root)
+        if title:
+            return title
+        active = self.get_active_window(windows=[])
+        return active.name if active is not None else None
 
     def get_foreground_window(self) -> uia.Control | None:
         handle = uia.GetForegroundWindow()

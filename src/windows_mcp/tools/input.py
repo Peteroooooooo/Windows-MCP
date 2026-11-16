@@ -511,19 +511,29 @@ def execute_wait_for(
         if checkpoint is not None:
             checkpoint()
         attempts += 1
-        use_ui_tree = normalized != "active_window"
-        desktop_state = desktop.get_state(
-            use_vision=False,
-            use_dom=use_dom_bool if use_ui_tree else False,
-            use_ui_tree=use_ui_tree,
-            use_annotation=False,
-        )
-        matched, last_detail = _matches_wait_condition(
-            desktop_state=desktop_state,
-            condition=normalized,
-            text=text,
-            window_name=window_name,
-        )
+        if normalized == "active_window" and hasattr(type(desktop), "get_active_window_name"):
+            expected = window_name or text
+            active_name = desktop.get_active_window_name() or ""
+            matched = _text_matches(active_name, expected)
+            last_detail = (
+                f"active window matched {active_name!r}"
+                if matched
+                else f"active window was {active_name!r}"
+            )
+        else:
+            use_ui_tree = normalized != "active_window"
+            desktop_state = desktop.get_state(
+                use_vision=False,
+                use_dom=use_dom_bool if use_ui_tree else False,
+                use_ui_tree=use_ui_tree,
+                use_annotation=False,
+            )
+            matched, last_detail = _matches_wait_condition(
+                desktop_state=desktop_state,
+                condition=normalized,
+                text=text,
+                window_name=window_name,
+            )
         if matched:
             elapsed = time.monotonic() - started_at
             return (

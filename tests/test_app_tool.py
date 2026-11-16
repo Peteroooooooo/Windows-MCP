@@ -271,3 +271,69 @@ def test_existing_app_modes_delegate_unchanged(
 
     assert result == "legacy app result"
     assert desktop.app_calls == [(mode, name, window_loc, window_size)]
+
+
+def test_launch_executable_resolves_bare_name_from_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    exe = bin_dir / "notepad.exe"
+    exe.write_text("", encoding="utf-8")
+
+    cwd_dir = tmp_path / "cwd"
+    cwd_dir.mkdir()
+    (cwd_dir / "notepad.exe").write_text("", encoding="utf-8")
+
+    monkeypatch.chdir(cwd_dir)
+    monkeypatch.setenv("PATH", str(bin_dir))
+    popen_calls: list[list[str]] = []
+    monkeypatch.setattr(
+        app.subprocess,
+        "Popen",
+        lambda command, **_kw: popen_calls.append(command) or SimpleNamespace(pid=42),
+    )
+
+    result = json.loads(
+        asyncio.run(
+            _mcp().tools["App"](
+                mode="launch_executable",
+                executable="notepad.exe",
+            )
+        )
+    )
+
+    assert result["executable"] == str(exe.resolve())
+    assert popen_calls == [[str(exe.resolve())]]
+
+
+def test_launch_executable_resolves_bare_name_from_app_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    exe = tmp_path / "msedge.exe"
+    exe.write_text("", encoding="utf-8")
+
+    monkeypatch.setenv("PATH", "")
+    monkeypatch.setattr(app, "_resolve_from_app_paths", lambda cmd: exe if cmd == "msedge.exe" else None)
+    popen_calls: list[list[str]] = []
+    monkeypatch.setattr(
+        app.subprocess,
+        "Popen",
+        lambda command, **_kw: popen_calls.append(command) or SimpleNamespace(pid=99),
+    )
+
+    result = json.loads(
+        asyncio.run(
+            _mcp().tools["App"](
+                mode="launch_executable",
+                executable="msedge.exe",
+            )
+        )
+    )
+
+    assert result["executable"] == str(exe.resolve())
+    assert popen_calls == [[str(exe.resolve())]]
+
+
