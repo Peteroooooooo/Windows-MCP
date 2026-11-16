@@ -5,10 +5,11 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from fastmcp import Context
 from mcp.types import ToolAnnotations
+from pydantic import Field
 
 from windows_mcp.desktop.control import ControlBlocked, get_controller
 from windows_mcp.desktop.utils import as_bool as _as_bool
@@ -427,14 +428,14 @@ def register(mcp, *, get_desktop, get_analytics):
         description=(
             "PREFER THIS TOOL whenever chaining 2+ desktop or browser actions — executes up to 50 "
             "steps in a single MCP call to eliminate multi-turn LLM round-trip latency. Supported actions: "
-            "'app' (mode='launch'|'launch_executable'|'resize'|'switch', name/executable, args, cwd, window_loc, window_size), "
+            "'app' (mode='launch'|'launch_executable'|'resize'|'switch', name/executable [supports bare names like 'notepad.exe'/'msedge.exe' via PATH/App Paths], args, cwd, window_loc, window_size), "
             "'click' (loc=[x,y] or label, button, clicks), "
             "'type' (text; optional loc=[x,y]/label — omit both to type into the currently focused control; clear, caret_position, press_enter), "
             "'move' (loc=[x,y] or label, drag, from_loc, duration), "
             "'scroll' (optional loc=[x,y]/label, type, direction, wheel_times), "
             "'shortcut' (shortcut, e.g. 'ctrl+t', 'ctrl+l', 'ctrl+v'), "
             "'wait' (duration/seconds as float, e.g. 0.15), "
-            "'wait_for' (condition in {'text_exists','active_window','element_exists','element_enabled','focused_element'}, text, window_name, timeout, interval, use_dom — 'active_window' skips UI tree traversal and is ultra-fast), and "
+            "'wait_for' (condition in {'text_exists','active_window','element_exists','element_enabled','focused_element'}, text, window_name, timeout, interval, use_dom — 'active_window' uses fast Win32 lookup without UI tree traversal), and "
             "'clipboard' (mode='get'|'set', text). "
             "Tips: pass loc=[x,y] directly from Snapshot text output; start coordinate clicks with app(mode='switch') or wait_for(condition='active_window') if focus is not guaranteed. "
             "All steps are validated before execution starts. Set final_capture='none' (default, fastest; verify via wait_for or type read-back), "
@@ -450,13 +451,47 @@ def register(mcp, *, get_desktop, get_analytics):
     )
     @with_analytics(get_analytics(), "Sequence-Tool", run_sync_in_thread=False)
     def sequence_tool(
-        steps: list[dict[str, Any]] | str,
-        stop_on_error: bool | str = True,
-        step_delay: float = 0.0,
-        final_capture: Literal["none", "screenshot", "snapshot"] = "none",
-        use_dom: bool | str = False,
-        capture_region: list[int] | str | None = None,
-        capture_display: list[int] | str | None = None,
+        steps: Annotated[
+            list[dict[str, Any]] | str,
+            Field(
+                description=(
+                    "Ordered list (1–50) of action objects, e.g. "
+                    '[{"action":"app","mode":"switch","name":"Edge"},'
+                    '{"action":"shortcut","shortcut":"ctrl+l"},'
+                    '{"action":"type","text":"https://example.com","press_enter":true},'
+                    '{"action":"wait_for","condition":"active_window","window_name":"Example"}]'
+                )
+            ),
+        ],
+        stop_on_error: Annotated[
+            bool | str,
+            Field(description="Stop immediately on the first failed step (default true)."),
+        ] = True,
+        step_delay: Annotated[
+            float,
+            Field(description="Optional pause in seconds (0–5) inserted between non-wait steps."),
+        ] = 0.0,
+        final_capture: Annotated[
+            Literal["none", "screenshot", "snapshot"],
+            Field(
+                description=(
+                    "Capture mode after steps finish: 'none' (default, fastest), "
+                    "'screenshot' (fast image only), or 'snapshot' (full UI tree + image)."
+                )
+            ),
+        ] = "none",
+        use_dom: Annotated[
+            bool | str,
+            Field(description="Extract browser DOM in final capture (requires final_capture='snapshot')."),
+        ] = False,
+        capture_region: Annotated[
+            list[int] | str | None,
+            Field(description="Optional [left, top, right, bottom] region for final_capture."),
+        ] = None,
+        capture_display: Annotated[
+            list[int] | str | None,
+            Field(description="Optional display indices e.g. [0] for final_capture."),
+        ] = None,
         ctx: Context = None,
     ) -> list[Any]:
         raw_steps = _coerce_steps(steps)

@@ -306,7 +306,7 @@ def register(
 
     @mcp.tool(
         name="Scroll",
-        description="Scrolls at coordinates [x, y], a UI element's label/id, or current mouse position if loc=None. Type: vertical (default) or horizontal. Direction: up/down for vertical, left/right for horizontal. wheel_times controls amount (1 wheel ≈ 3-5 lines). Use for navigating long content, lists, and web pages.",
+        description="Scrolls at coordinates [x, y], a UI element's label/id, or current mouse position if loc=None. Type: vertical (default) or horizontal. Direction: up/down for vertical, left/right for horizontal. wheel_times controls amount (1 wheel ≈ 3-5 lines). For 2+ chained actions (e.g. scroll then click/wait), prefer Sequence in one call.",
         annotations=ToolAnnotations(
             title="Scroll",
             readOnlyHint=False,
@@ -343,7 +343,7 @@ def register(
             "Set drag=True to perform a drag-and-drop operation from the current mouse position "
             "to the target coordinates, or provide from_loc=[x, y] to make the drag explicit-start "
             "and atomic in one tool call. Optional duration controls bounded intermediate movement. "
-            "Default (drag=False) is a simple cursor move (hover). "
+            "Default (drag=False) is a simple cursor move (hover). For 2+ chained actions (e.g. switch window then drag, or drag then click), prefer Sequence in one call. "
             "Drag uses synthesized mouse input, which XAML shell surfaces such as Start menu "
             "tiles and pinned taskbar buttons ignore: there the drag does nothing even though "
             "the call succeeds, so use their context-menu commands (for example Move to front) "

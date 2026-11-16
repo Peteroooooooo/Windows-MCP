@@ -857,10 +857,11 @@ Remote (with auth + IP allowlist + TLS):
 
 MCP Client can access the following tools to interact with Windows:
 
+- `Sequence` (**recommended for 2+ steps**): Execute up to 50 desktop/browser actions (`app`, `click`, `type`, `move`, `scroll`, `shortcut`, `wait`, `wait_for`, `clipboard`) in a single MCP call to eliminate multi-turn latency. `type` can omit `loc`/`label` to type into the currently focused control; `final_capture` defaults to `"none"` and also supports `"screenshot"` or `"snapshot"` with optional `capture_display` / `capture_region`.
 - `Click`: Click on the screen at the given coordinates.
 - `Type`: Type text on an element (optionally clears existing text).
 - `Scroll`: Scroll vertically or horizontally on the window or specific regions.
-- `Move`: Move mouse pointer or drag (set drag=True) to coordinates. For deterministic
+- `Move`: Move mouse pointer or drag (set `drag=True`) to coordinates (emits pointer move events so both native and HTML5 `draggable` web targets work). For deterministic
   drag, set `from_loc=[x, y]` with `drag=True` to press at an explicit start point and
   release at `loc` in one tool call. Optional `duration` adds bounded intermediate
   movement. Drag is not supported on XAML shell surfaces such as Start menu tiles and
@@ -868,14 +869,14 @@ MCP Client can access the following tools to interact with Windows:
   nothing while the call still succeeds. Use their context-menu commands (`Move to front`,
   `Move left`, `Move right` on Start menu tiles) instead.
 - `Shortcut`: Press keyboard shortcuts (`Ctrl+c`, `Alt+Tab`, etc).
-- `Wait`: Pause for a defined duration.
-- `WaitFor`: Wait until text, an active window, an element, or a focused element appears by polling UI state inside one tool call.
+- `Wait`: Pause for a defined duration (supports fractional seconds such as `0.15`).
+- `WaitFor`: Wait until text, an active window (fast Win32 title lookup), an element, or a focused element appears by polling state inside one tool call.
 - `ControlStatus`: Read the desktop control owner and remaining user-idle wait; `release=true` ends AI control. It stays available when user takeover blocks new tool calls. AI control has no time limit: once a gated call takes the desktop, it stays with AI between calls until the agent releases it, the user takes over, or the server stops. During AI control, a visible edge and a cursor glow tagged `AI` indicate ownership, and each AI click shows a brief expanding ring at the click point; moving the physical mouse substantially or pressing `Ctrl+Alt+Shift+Backspace` returns control to the user until 10 seconds of inactivity. During screenshot capture, the indicator is temporarily hidden and physical input is released; any physical input during this interval preempts AI control, although `ControlStatus` can briefly still report `ai` until that event is processed. Stepwise desktop input stops at its next checkpoint, but an already-running external command (for example `PowerShell` or an `App` launch) may continue after takeover; this control gate does not cancel processes or undo completed side effects. On a detected hook fault, injected keys and mouse buttons are released asynchronously, so physical input can briefly overlap a still-held AI key or button. Windows may also silently remove a low-level hook without notifying this process; periodic hook replacement reduces but does not eliminate that undetected window. User takeover is therefore best-effort, not a security boundary or a guarantee of exclusive control.
   Sessionless MCP 2026-07-28 clients cannot receive unsolicited control-state logs; they should query `ControlStatus` when they need the current owner.
 - `DisplayInventory`: Read display layout, work areas, effective DPI, and scale metadata.
 - `Screenshot`: Fast screenshot-first desktop capture with cursor position, active/open windows, and an image. Skips UI tree extraction for speed and should be the default first call when you mainly need visual context. Supports `display=[0]` or `display=[0,1]` using zero-based active Windows display indices, and `region=[left, top, right, bottom]` (virtual-desktop pixel coordinates) to capture just that rectangle instead of the whole screen — cheaper on tokens when you already know which area matters. `region` takes precedence over `display` when both are given; an invalid or out-of-bounds region raises an error. After capture, a brief orange-red glowing border is drawn inside the captured area as a visual confirmation (set `WINDOWS_MCP_DISABLE_FLASH=1` to disable).
 - `Snapshot`: Full desktop state capture for workflows that need interactive element ids, scrollable regions, or `use_dom=True` browser extraction. Supports `use_vision=True` for including screenshots, `display=[0]` or `display=[0,1]` using zero-based active Windows display indices, and `region=[left, top, right, bottom]` (virtual-desktop pixel coordinates) to inspect just that rectangle instead of the whole screen; `region` takes precedence over `display` when both are given, and an invalid or out-of-bounds region raises an error.
-- `App`: Launch an application by Start Menu name or strictly by executable path with separated argv and optional cwd; resize, move, and switch between windows.
+- `App`: Launch an application by Start Menu name or by executable path / bare executable name resolved via `PATH` and Windows `App Paths` (with separated argv and optional cwd); resize, move, and switch between windows.
 - `PowerShell`: To execute PowerShell commands.
 - `FileSystem`: Read, write, copy, move, delete, list, search, and inspect files and directories.
 - `Scrape`: To scrape the entire webpage for information.

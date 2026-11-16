@@ -18,7 +18,7 @@ def _as_loc(value: list | str | None) -> list | None:
 def register(mcp, *, get_desktop, get_analytics):
     @mcp.tool(
         name="MultiSelect",
-        description="Selects multiple items such as files, folders, or checkboxes if press_ctrl=True, or performs multiple clicks if False. Pass locs (list of coordinates) or labels (list of UI element labels/ids).",
+        description="Selects multiple items such as files, folders, or checkboxes if press_ctrl=True, or performs multiple clicks if False. Pass locs (list of coordinates) or labels (list of UI element labels/ids). For mixed multi-step workflows (e.g. click + type + shortcut + wait), prefer Sequence.",
         annotations=ToolAnnotations(
             title="MultiSelect",
             readOnlyHint=False,
@@ -56,7 +56,7 @@ def register(mcp, *, get_desktop, get_analytics):
 
     @mcp.tool(
         name="MultiEdit",
-        description="Enters text into multiple input fields at specified coordinates locs=[[x,y,text], ...] or using labels=[[label,text], ...]. Provide either locs or labels.",
+        description="Enters text into multiple input fields at specified coordinates locs=[[x,y,text], ...] or using labels=[[label,text], ...]. Provide either locs or labels. For mixed flows (filling fields + selecting dropdowns/checkboxes + clicking submit + waiting), prefer Sequence.",
         annotations=ToolAnnotations(
             title="MultiEdit",
             readOnlyHint=False,

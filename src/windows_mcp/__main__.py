@@ -74,11 +74,17 @@ instructions = dedent("""
 Windows MCP server provides tools to interact directly with the Windows desktop,
 thus enabling to operate the desktop on the user's behalf.
 
-Speed & tool-selection rules:
-1. Prefer `Sequence` for any workflow with 2+ predictable steps (launching/switching apps, shortcuts like ctrl+t/ctrl+l, clicking, typing, scrolling, fractional waits, wait_for, clipboard get/set). Pack all deterministic steps into ONE `Sequence` call instead of making separate Click/Type/Shortcut/Wait calls — this eliminates multi-turn round-trip latency.
-2. Skip unnecessary `Snapshot` calls: if the target app, shortcut, or coordinates are already known, start directly with `Sequence` or `Screenshot` rather than capturing a full UI tree first. Reserve `Snapshot` (with `use_dom=True` for browser pages) for discovering unknown element coordinates.
-3. Keep `Sequence` `final_capture="none"` (default) when `wait_for` or `type` read-back already verifies the state. When visual verification is needed on multi-monitor setups, pass `final_capture="screenshot"` with `capture_display=[0]` or `capture_region=[left, top, right, bottom]`.
-4. In `Sequence`: `type` can omit `loc`/`label` to type into the currently focused control; `loc=[x, y]` from `Snapshot` text output works directly without needing numeric labels; anchor coordinate clicks with `app(mode="switch")` or `wait_for(condition="active_window")` when window focus might have changed; valid `wait_for` conditions are `text_exists`, `active_window`, `element_exists`, `element_enabled`, `focused_element`.
+Default workflow & speed rules (apply automatically in any client):
+1. Batch 2+ steps with `Sequence`: whenever a task involves 2 or more predictable desktop/browser steps (launch/switch app, shortcuts like ctrl+t/ctrl+l, clicking, typing, scrolling, fractional waits, wait_for, clipboard get/set), pack them into ONE `Sequence` call instead of calling Click/Type/Shortcut/Wait one by one.
+2. Skip unnecessary `Snapshot` / full-screen captures: if the target app, URL, shortcut, or coordinates are already known, start directly with `Sequence` (or `Screenshot` for a quick visual check). Reserve `Snapshot` (with `use_dom=True` for web pages, and `region` or `display` when possible) for discovering unknown UI coordinates.
+3. Keep `Sequence` `final_capture="none"` (default) when `wait_for` or `type` read-back already verifies the outcome. When visual verification is needed, use `final_capture="screenshot"` with `capture_display=[0]` or `capture_region=[left, top, right, bottom]` to avoid oversized multi-monitor images.
+4. `Sequence` precision tips:
+   - `type` accepts `loc=[x, y]`, `label`, or neither (omit both to type directly into the currently focused control).
+   - `loc=[x, y]` from `Snapshot` text output works directly; no numeric `label` lookup is needed.
+   - Anchor cross-window flows with `app(mode="switch")` + `wait_for(condition="active_window", window_name=...)` (uses fast Win32 title lookup without UI tree traversal).
+   - Valid `wait_for` conditions: `text_exists`, `active_window`, `element_exists`, `element_enabled`, `focused_element`.
+   - `app(mode="launch_executable", executable=...)` accepts full paths as well as bare Windows executable names in PATH or App Paths (e.g. `notepad.exe`, `msedge.exe`).
+   - `Wait` and `Sequence` `wait` steps accept fractional seconds (e.g. `0.15`). If `ControlStatus` or `Snapshot` reports an active `ClipCursor` lock, keep pointer actions inside those bounds.
 """)
 
 
