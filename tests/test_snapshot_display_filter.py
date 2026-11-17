@@ -664,6 +664,49 @@ class TestDisplayFiltering:
         with pytest.raises(ValueError, match="use_dom=True requires use_ui_tree=True"):
             desktop.get_state(use_dom=True, use_ui_tree=False)
 
+    def test_get_state_active_window_only_skips_other_windows(self, desktop):
+        desktop.tree = MagicMock()
+        desktop.tree.screen_box = make_box(0, 0, 1920, 1080)
+        desktop.tree.get_state.return_value = TreeState()
+        desktop.get_displays = MagicMock(return_value=[])
+        active_window = Window(
+            name="Browser",
+            is_browser=True,
+            depth=0,
+            status=Status.NORMAL,
+            bounding_box=make_box(100, 100, 900, 700),
+            handle=10,
+            process_id=11,
+        )
+        other_window = Window(
+            name="Explorer",
+            is_browser=False,
+            depth=1,
+            status=Status.NORMAL,
+            bounding_box=make_box(200, 200, 800, 600),
+            handle=20,
+            process_id=22,
+        )
+        desktop.get_controls_handles = MagicMock(return_value=[10, 20, 30])
+        desktop.get_windows = MagicMock(return_value=([active_window, other_window], {10, 20}))
+        desktop.get_active_window = MagicMock(return_value=active_window)
+        desktop.get_cursor_location = MagicMock(return_value=(300, 300))
+
+        with patch(
+            "windows_mcp.desktop.service.get_current_desktop", return_value={"name": "Desktop 1"}
+        ):
+            with patch(
+                "windows_mcp.desktop.service.get_all_desktops", return_value=[{"name": "Desktop 1"}]
+            ):
+                desktop.get_state(
+                    use_vision=False,
+                    use_annotation=False,
+                    use_ui_tree=True,
+                    active_window_only=True,
+                )
+
+        desktop.tree.get_state.assert_called_once_with(10, [], use_dom=False)
+
     def test_get_state_logs_snapshot_profile_when_enabled(self, desktop, monkeypatch):
         desktop.tree = MagicMock()
         desktop.tree.screen_box = make_box(0, 0, 1920, 1080)
@@ -809,3 +852,18 @@ class TestSnapshotTools:
         result = asyncio.run(main_module.screenshot_tool(save_path="relative.png"))
 
         assert result[0].startswith("Error saving screenshot:")
+
+    def test_snapshot_tool_active_window_only_forwards_flag_and_reports_scope(
+        self, desktop_state, monkeypatch
+    ):
+        desktop_state.screenshot_region = None
+        desktop_state.screenshot_displays = None
+        fake_desktop = MagicMock()
+        fake_desktop.get_state.return_value = desktop_state
+        monkeypatch.setattr(main_module, "desktop", fake_desktop)
+
+        result = asyncio.run(main_module.state_tool(active_window_only=" TRUE "))
+
+        assert fake_desktop.get_state.call_args.kwargs["active_window_only"] is True
+        assert "UI Tree Scope: Active window only" in result[0]
+

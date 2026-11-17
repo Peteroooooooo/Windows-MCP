@@ -85,6 +85,7 @@ Default workflow & speed rules (apply automatically in any client):
    - Valid `wait_for` conditions: `text_exists`, `active_window`, `element_exists`, `element_enabled`, `focused_element`.
    - `app(mode="launch_executable", executable=...)` accepts full paths as well as bare Windows executable names in PATH or App Paths (e.g. `notepad.exe`, `msedge.exe`).
    - `Wait` and `Sequence` `wait` steps accept fractional seconds (e.g. `0.15`). If `ControlStatus` or `Snapshot` reports an active `ClipCursor` lock, keep pointer actions inside those bounds.
+5. Hand desktop control back when done: pass `release_after=True` on the final `Sequence` of a task (or call `ControlStatus(release=True)` if ending with standalone tools or before waiting on the user).
 """)
 
 

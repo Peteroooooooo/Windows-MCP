@@ -20,6 +20,8 @@ import struct
 import threading
 import ctypes
 import ctypes.wintypes
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 import comtypes
 import comtypes.client
@@ -32,6 +34,31 @@ SEARCH_INTERVAL = 0.5  # search control interval seconds
 MAX_MOVE_SECOND = 1  # simulate mouse move or drag max seconds
 TIME_OUT_SECOND = 10
 OPERATION_WAIT_TIME = 0.5
+_OPERATION_WAIT_OVERRIDE: ContextVar[float | None] = ContextVar(
+    "uia_operation_wait_override", default=None
+)
+
+
+def get_operation_wait_override() -> float | None:
+    """Return the active override for default UIA operation waits, if any."""
+    return _OPERATION_WAIT_OVERRIDE.get()
+
+
+@contextmanager
+def operation_wait_override(wait_time: float | None):
+    """Temporarily override default UIA post-operation wait times (e.g. inside Sequence)."""
+    token = _OPERATION_WAIT_OVERRIDE.set(wait_time)
+    try:
+        yield
+    finally:
+        _OPERATION_WAIT_OVERRIDE.reset(token)
+
+
+def _resolve_wait_time(wait_time: float | None) -> float:
+    if wait_time is not None:
+        return wait_time
+    override = _OPERATION_WAIT_OVERRIDE.get()
+    return OPERATION_WAIT_TIME if override is None else override
 MAX_PATH = 260
 DEBUG_SEARCH_TIME = False
 DEBUG_EXIST_DISAPPEAR = False
@@ -333,7 +360,7 @@ def SendMessage(handle: int, msg: int, wParam: int, lParam: int) -> int:
     )
 
 
-def Click(x: int, y: int, waitTime: float = OPERATION_WAIT_TIME) -> None:
+def Click(x: int, y: int, waitTime: float | None = None) -> None:
     """
     Simulate mouse click at point x, y.
     x: int.
@@ -344,10 +371,10 @@ def Click(x: int, y: int, waitTime: float = OPERATION_WAIT_TIME) -> None:
     AbsoluteMouseEvent(MouseEventFlag.LeftDown, x, y)
     time.sleep(0.05)
     AbsoluteMouseEvent(MouseEventFlag.LeftUp, x, y)
-    time.sleep(waitTime)
+    time.sleep(_resolve_wait_time(waitTime))
 
 
-def MiddleClick(x: int, y: int, waitTime: float = OPERATION_WAIT_TIME) -> None:
+def MiddleClick(x: int, y: int, waitTime: float | None = None) -> None:
     """
     Simulate mouse middle click at point x, y.
     x: int.
@@ -358,10 +385,10 @@ def MiddleClick(x: int, y: int, waitTime: float = OPERATION_WAIT_TIME) -> None:
     AbsoluteMouseEvent(MouseEventFlag.MiddleDown, x, y)
     time.sleep(0.05)
     AbsoluteMouseEvent(MouseEventFlag.MiddleUp, x, y)
-    time.sleep(waitTime)
+    time.sleep(_resolve_wait_time(waitTime))
 
 
-def RightClick(x: int, y: int, waitTime: float = OPERATION_WAIT_TIME) -> None:
+def RightClick(x: int, y: int, waitTime: float | None = None) -> None:
     """
     Simulate mouse right click at point x, y.
     x: int.
@@ -372,10 +399,10 @@ def RightClick(x: int, y: int, waitTime: float = OPERATION_WAIT_TIME) -> None:
     AbsoluteMouseEvent(MouseEventFlag.RightDown, x, y)
     time.sleep(0.05)
     AbsoluteMouseEvent(MouseEventFlag.RightUp, x, y)
-    time.sleep(waitTime)
+    time.sleep(_resolve_wait_time(waitTime))
 
 
-def PressMouse(x: int, y: int, waitTime: float = OPERATION_WAIT_TIME) -> None:
+def PressMouse(x: int, y: int, waitTime: float | None = None) -> None:
     """
     Press left mouse.
     x: int.
@@ -384,20 +411,20 @@ def PressMouse(x: int, y: int, waitTime: float = OPERATION_WAIT_TIME) -> None:
     """
     SetCursorPos(x, y)
     AbsoluteMouseEvent(MouseEventFlag.LeftDown, x, y)
-    time.sleep(waitTime)
+    time.sleep(_resolve_wait_time(waitTime))
 
 
-def ReleaseMouse(waitTime: float = OPERATION_WAIT_TIME) -> None:
+def ReleaseMouse(waitTime: float | None = None) -> None:
     """
     Release left mouse.
     waitTime: float.
     """
     x, y = GetCursorPos()
     AbsoluteMouseEvent(MouseEventFlag.LeftUp, x, y)
-    time.sleep(waitTime)
+    time.sleep(_resolve_wait_time(waitTime))
 
 
-def RightPressMouse(x: int, y: int, waitTime: float = OPERATION_WAIT_TIME) -> None:
+def RightPressMouse(x: int, y: int, waitTime: float | None = None) -> None:
     """
     Press right mouse.
     x: int.
@@ -406,20 +433,20 @@ def RightPressMouse(x: int, y: int, waitTime: float = OPERATION_WAIT_TIME) -> No
     """
     SetCursorPos(x, y)
     AbsoluteMouseEvent(MouseEventFlag.RightDown, x, y)
-    time.sleep(waitTime)
+    time.sleep(_resolve_wait_time(waitTime))
 
 
-def RightReleaseMouse(waitTime: float = OPERATION_WAIT_TIME) -> None:
+def RightReleaseMouse(waitTime: float | None = None) -> None:
     """
     Release right mouse.
     waitTime: float.
     """
     x, y = GetCursorPos()
     AbsoluteMouseEvent(MouseEventFlag.RightUp, x, y)
-    time.sleep(waitTime)
+    time.sleep(_resolve_wait_time(waitTime))
 
 
-def MiddlePressMouse(x: int, y: int, waitTime: float = OPERATION_WAIT_TIME) -> None:
+def MiddlePressMouse(x: int, y: int, waitTime: float | None = None) -> None:
     """
     Press middle mouse.
     x: int.
@@ -428,20 +455,20 @@ def MiddlePressMouse(x: int, y: int, waitTime: float = OPERATION_WAIT_TIME) -> N
     """
     SetCursorPos(x, y)
     AbsoluteMouseEvent(MouseEventFlag.MiddleDown, x, y)
-    time.sleep(waitTime)
+    time.sleep(_resolve_wait_time(waitTime))
 
 
-def MiddleReleaseMouse(waitTime: float = OPERATION_WAIT_TIME) -> None:
+def MiddleReleaseMouse(waitTime: float | None = None) -> None:
     """
     Release middle mouse.
     waitTime: float.
     """
     x, y = GetCursorPos()
     AbsoluteMouseEvent(MouseEventFlag.MiddleUp, x, y)
-    time.sleep(waitTime)
+    time.sleep(_resolve_wait_time(waitTime))
 
 
-def MoveTo(x: int, y: int, moveSpeed: float = 1, waitTime: float = OPERATION_WAIT_TIME) -> None:
+def MoveTo(x: int, y: int, moveSpeed: float = 1, waitTime: float | None = None) -> None:
     """
     Simulate mouse move to point x, y from current cursor.
     x: int.
@@ -478,17 +505,17 @@ def MoveTo(x: int, y: int, moveSpeed: float = 1, waitTime: float = OPERATION_WAI
             SetCursorPos(cx, cy)
             time.sleep(interval)
     SetCursorPos(x, y)
-    time.sleep(waitTime)
+    time.sleep(_resolve_wait_time(waitTime))
 
 
-def MoveToDuration(x: int, y: int, duration: float, waitTime: float = OPERATION_WAIT_TIME) -> None:
+def MoveToDuration(x: int, y: int, duration: float, waitTime: float | None = None) -> None:
     """
     Simulate mouse move to point x, y over a bounded duration from current cursor.
     """
     curX, curY = GetCursorPos()
     if duration <= 0:
         SetCursorPos(x, y)
-        time.sleep(waitTime)
+        time.sleep(_resolve_wait_time(waitTime))
         return
 
     stepCount = max(2, min(200, math.ceil(duration / 0.01)))
@@ -499,7 +526,7 @@ def MoveToDuration(x: int, y: int, duration: float, waitTime: float = OPERATION_
         cy = curY + round((y - curY) * ratio)
         SetCursorPos(cx, cy)
         time.sleep(interval)
-    time.sleep(waitTime)
+    time.sleep(_resolve_wait_time(waitTime))
 
 
 def DragDrop(
@@ -508,7 +535,7 @@ def DragDrop(
     x2: int,
     y2: int,
     moveSpeed: float = 1,
-    waitTime: float = OPERATION_WAIT_TIME,
+    waitTime: float | None = None,
     duration: float | None = None,
 ) -> None:
     """
@@ -521,6 +548,7 @@ def DragDrop(
     waitTime: float.
     duration: optional seconds for bounded intermediate movement.
     """
+    resolved_wait = _resolve_wait_time(waitTime)
     try:
         PressMouse(x1, y1, 0.05)
         if duration is None:
@@ -529,11 +557,11 @@ def DragDrop(
             MoveToDuration(x2, y2, duration, 0.05)
     except BaseException as move_error:
         try:
-            ReleaseMouse(waitTime)
+            ReleaseMouse(resolved_wait)
         except BaseException as release_error:
             raise release_error from move_error
         raise
-    ReleaseMouse(waitTime)
+    ReleaseMouse(resolved_wait)
 
 
 def RightDragDrop(
@@ -542,7 +570,7 @@ def RightDragDrop(
     x2: int,
     y2: int,
     moveSpeed: float = 1,
-    waitTime: float = OPERATION_WAIT_TIME,
+    waitTime: float | None = None,
 ) -> None:
     """
     Simulate mouse right button drag from point x1, y1 drop to point x2, y2.
@@ -555,7 +583,7 @@ def RightDragDrop(
     """
     RightPressMouse(x1, y1, 0.05)
     MoveTo(x2, y2, moveSpeed, 0.05)
-    RightReleaseMouse(waitTime)
+    RightReleaseMouse(_resolve_wait_time(waitTime))
 
 
 def MiddleDragDrop(
@@ -564,7 +592,7 @@ def MiddleDragDrop(
     x2: int,
     y2: int,
     moveSpeed: float = 1,
-    waitTime: float = OPERATION_WAIT_TIME,
+    waitTime: float | None = None,
 ) -> None:
     """
     Simulate mouse middle button drag from point x1, y1 drop to point x2, y2.
@@ -577,11 +605,11 @@ def MiddleDragDrop(
     """
     MiddlePressMouse(x1, y1, 0.05)
     MoveTo(x2, y2, moveSpeed, 0.05)
-    MiddleReleaseMouse(waitTime)
+    MiddleReleaseMouse(_resolve_wait_time(waitTime))
 
 
 def WheelDown(
-    wheelTimes: int = 1, interval: float = 0.05, waitTime: float = OPERATION_WAIT_TIME
+    wheelTimes: int = 1, interval: float = 0.05, waitTime: float | None = None
 ) -> None:
     """
     Simulate mouse wheel down.
@@ -592,11 +620,11 @@ def WheelDown(
     for _i in range(wheelTimes):
         mouse_event(MouseEventFlag.Wheel, 0, 0, -120, 0)  # WHEEL_DELTA=120
         time.sleep(interval)
-    time.sleep(waitTime)
+    time.sleep(_resolve_wait_time(waitTime))
 
 
 def WheelUp(
-    wheelTimes: int = 1, interval: float = 0.05, waitTime: float = OPERATION_WAIT_TIME
+    wheelTimes: int = 1, interval: float = 0.05, waitTime: float | None = None
 ) -> None:
     """
     Simulate mouse wheel up.
@@ -607,7 +635,7 @@ def WheelUp(
     for _i in range(wheelTimes):
         mouse_event(MouseEventFlag.Wheel, 0, 0, 120, 0)  # WHEEL_DELTA=120
         time.sleep(interval)
-    time.sleep(waitTime)
+    time.sleep(_resolve_wait_time(waitTime))
 
 
 def GetScreenSize() -> Tuple[int, int]:
@@ -1374,34 +1402,34 @@ def RunScriptAsAdmin(
     )
 
 
-def SendKey(key: int, waitTime: float = OPERATION_WAIT_TIME) -> None:
+def SendKey(key: int, waitTime: float | None = None) -> None:
     """
     Simulate typing a key.
     key: int, a value in class `Keys`.
     """
     keybd_event(key, 0, KeyboardEventFlag.KeyDown | KeyboardEventFlag.ExtendedKey, 0)
     keybd_event(key, 0, KeyboardEventFlag.KeyUp | KeyboardEventFlag.ExtendedKey, 0)
-    time.sleep(waitTime)
+    time.sleep(_resolve_wait_time(waitTime))
 
 
-def PressKey(key: int, waitTime: float = OPERATION_WAIT_TIME) -> None:
+def PressKey(key: int, waitTime: float | None = None) -> None:
     """
     Simulate a key down for key.
     key: int, a value in class `Keys`.
     waitTime: float.
     """
     keybd_event(key, 0, KeyboardEventFlag.KeyDown | KeyboardEventFlag.ExtendedKey, 0)
-    time.sleep(waitTime)
+    time.sleep(_resolve_wait_time(waitTime))
 
 
-def ReleaseKey(key: int, waitTime: float = OPERATION_WAIT_TIME) -> None:
+def ReleaseKey(key: int, waitTime: float | None = None) -> None:
     """
     Simulate a key up for key.
     key: int, a value in class `Keys`.
     waitTime: float.
     """
     keybd_event(key, 0, KeyboardEventFlag.KeyUp | KeyboardEventFlag.ExtendedKey, 0)
-    time.sleep(waitTime)
+    time.sleep(_resolve_wait_time(waitTime))
 
 
 def IsKeyPressed(key: int) -> bool:
@@ -1570,7 +1598,7 @@ def _VKtoSC(key: int) -> int:
 def SendKeys(
     text: str,
     interval: float = 0.01,
-    waitTime: float = OPERATION_WAIT_TIME,
+    waitTime: float | None = None,
     charMode: bool = True,
     debug: bool = False,
 ) -> None:
@@ -1838,7 +1866,7 @@ def SendKeys(
                 # Attempt every release without masking the original failure.
                 pass
         raise
-    time.sleep(waitTime)
+    time.sleep(_resolve_wait_time(waitTime))
 
 
 def SetThreadDpiAwarenessContext(dpiAwarenessContext: int):

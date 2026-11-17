@@ -11,6 +11,7 @@ from fastmcp import Context
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from windows_mcp import uia
 from windows_mcp.desktop.control import ControlBlocked, get_controller
 from windows_mcp.desktop.utils import as_bool as _as_bool
 from windows_mcp.desktop.utils import as_int_list as _as_int_list
@@ -439,7 +440,8 @@ def register(mcp, *, get_desktop, get_analytics):
             "'clipboard' (mode='get'|'set', text). "
             "Tips: pass loc=[x,y] directly from Snapshot text output; start coordinate clicks with app(mode='switch') or wait_for(condition='active_window') if focus is not guaranteed. "
             "All steps are validated before execution starts. Set final_capture='none' (default, fastest; verify via wait_for or type read-back), "
-            "'screenshot' (fast visual verification — pass capture_display=[0] or capture_region=[l,t,r,b] on multi-monitor setups), or 'snapshot' (full UI tree + screenshot)."
+            "'screenshot' (fast visual verification — pass capture_display=[0] or capture_region=[l,t,r,b] on multi-monitor setups), or 'snapshot' (full UI tree + screenshot). "
+            "Pass release_after=True on the final Sequence of a task to automatically hand desktop control back to the user without an extra ControlStatus(release=True) call."
         ),
         annotations=ToolAnnotations(
             title="Sequence",
@@ -492,11 +494,21 @@ def register(mcp, *, get_desktop, get_analytics):
             list[int] | str | None,
             Field(description="Optional display indices e.g. [0] for final_capture."),
         ] = None,
+        release_after: Annotated[
+            bool | str,
+            Field(
+                description=(
+                    "Release AI desktop control back to the user when the sequence finishes "
+                    "(default false). Set true on the final batch of a task."
+                )
+            ),
+        ] = False,
         ctx: Context = None,
     ) -> list[Any]:
         raw_steps = _coerce_steps(steps)
         stop_on_error_bool = _as_bool(stop_on_error, "stop_on_error")
         use_dom_bool = _as_bool(use_dom, "use_dom")
+        release_after_bool = _as_bool(release_after, "release_after")
         _validate_finite_number(step_delay, "step_delay")
         if step_delay < 0 or step_delay > 5:
             raise ValueError("step_delay must be between 0 and 5 seconds")
@@ -520,27 +532,34 @@ def register(mcp, *, get_desktop, get_analytics):
         failed_step: tuple[int, str, Exception] | None = None
         started_at = time.monotonic()
 
-        for index, step in enumerate(validated_steps, start=1):
-            checkpoint()
-            action = step["action"]
-            try:
-                outcome = _execute_step(desktop, step, checkpoint)
-                logs.append(f"[{index}/{total}] {action}: OK - {outcome}")
-            except ControlBlocked:
-                raise
-            except Exception as exc:
-                logs.append(f"[{index}/{total}] {action}: FAILED - {exc}")
-                failed_step = (index, action, exc)
-                if stop_on_error_bool:
-                    break
-                continue
+        try:
+            with uia.operation_wait_override(0.05):
+                for index, step in enumerate(validated_steps, start=1):
+                    checkpoint()
+                    action = step["action"]
+                    try:
+                        outcome = _execute_step(desktop, step, checkpoint)
+                        logs.append(f"[{index}/{total}] {action}: OK - {outcome}")
+                    except ControlBlocked:
+                        raise
+                    except Exception as exc:
+                        logs.append(f"[{index}/{total}] {action}: FAILED - {exc}")
+                        failed_step = (index, action, exc)
+                        if stop_on_error_bool:
+                            break
+                        continue
 
-            if (
-                step_delay > 0
-                and index < total
-                and action not in ("wait", "wait_for")
-            ):
-                _sleep_with_checkpoint(float(step_delay), checkpoint)
+                    if (
+                        step_delay > 0
+                        and index < total
+                        and action not in ("wait", "wait_for")
+                    ):
+                        _sleep_with_checkpoint(float(step_delay), checkpoint)
+        finally:
+            if release_after_bool:
+                release_fn = getattr(controller, "release", None)
+                if callable(release_fn):
+                    release_fn()
 
         elapsed = time.monotonic() - started_at
         if failed_step is not None and stop_on_error_bool:

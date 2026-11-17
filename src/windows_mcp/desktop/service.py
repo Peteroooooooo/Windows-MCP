@@ -150,6 +150,7 @@ class Desktop:
         display_indices: list[int] | None = None,
         region: list[int] | tuple[int, ...] | None = None,
         max_image_size: Size | None = None,
+        active_window_only: bool | str = False,
     ) -> DesktopState:
         use_annotation = use_annotation is True or (
             isinstance(use_annotation, str) and use_annotation.lower() == "true"
@@ -162,6 +163,9 @@ class Desktop:
             isinstance(use_ui_tree, str) and use_ui_tree.lower() == "true"
         )
         as_bytes = as_bytes is True or (isinstance(as_bytes, str) and as_bytes.lower() == "true")
+        active_window_only = active_window_only is True or (
+            isinstance(active_window_only, str) and active_window_only.lower() == "true"
+        )
 
         if use_dom and not use_ui_tree:
             raise ValueError("use_dom=True requires use_ui_tree=True")
@@ -227,30 +231,44 @@ class Desktop:
         logger.debug(f"Windows: {windows}")
 
         if use_ui_tree:
-            other_windows_handles = set(controls_handles) - windows_handles
-            if active_window_handle is not None:
-                other_windows_handles.discard(active_window_handle)
-            tree_active_window_handle = active_window_handle
-            if screenshot_region:
-                active_window_in_region = (
-                    self._filter_window_to_region(active_window, screenshot_region) is not None
+            if active_window_only:
+                tree_active_window_handle = active_window_handle
+                if (
+                    screenshot_region
+                    and self._filter_window_to_region(active_window, screenshot_region) is None
+                ):
+                    tree_active_window_handle = None
+                other_windows_handles = []
+                tree_state = self.tree.get_state(
+                    tree_active_window_handle,
+                    other_windows_handles,
+                    use_dom=use_dom,
                 )
-                tree_active_window_handle = (
-                    active_window_handle if active_window_in_region else None
+            else:
+                other_windows_handles = set(controls_handles) - windows_handles
+                if active_window_handle is not None:
+                    other_windows_handles.discard(active_window_handle)
+                tree_active_window_handle = active_window_handle
+                if screenshot_region:
+                    active_window_in_region = (
+                        self._filter_window_to_region(active_window, screenshot_region) is not None
+                    )
+                    tree_active_window_handle = (
+                        active_window_handle if active_window_in_region else None
+                    )
+                    other_windows_handles.update(
+                        window.handle
+                        for window in windows
+                        if self._filter_window_to_region(window, screenshot_region) is not None
+                    )
+                # controls_handles is in z-order, front first. Keep that order: the tree walks the
+                # windows in the order given and skips the rest once the element limit is reached.
+                z_order = {handle: index for index, handle in enumerate(controls_handles)}
+                tree_state = self.tree.get_state(
+                    tree_active_window_handle,
+                    sorted(other_windows_handles, key=lambda h: z_order.get(h, len(z_order))),
+                    use_dom=use_dom,
                 )
-                other_windows_handles.update(
-                    window.handle
-                    for window in windows
-                    if self._filter_window_to_region(window, screenshot_region) is not None
-                )
-            # controls_handles is in z-order, front first. Keep that order: the tree walks the
-            # windows in the order given and skips the rest once the element limit is reached.
-            z_order = {handle: index for index, handle in enumerate(controls_handles)}
-            tree_state = self.tree.get_state(
-                tree_active_window_handle,
-                sorted(other_windows_handles, key=lambda h: z_order.get(h, len(z_order))),
-                use_dom=use_dom,
-            )
         else:
             root_box = screenshot_region or self.tree.screen_box
             tree_state = TreeState(
@@ -835,7 +853,7 @@ class Desktop:
                     dbl_wait = uia.GetDoubleClickTime() / 2000.0
                     for i in range(clicks):
                         owner.checkpoint_current()
-                        uia.Click(x, y, waitTime=dbl_wait if i < clicks - 1 else 0.5)
+                        uia.Click(x, y, waitTime=dbl_wait if i < clicks - 1 else None)
                         owner.record_step_current()
                 else:
                     owner.checkpoint_current()
@@ -899,8 +917,14 @@ class Desktop:
             owner.record_step_current()
         notes: list[str] = []
         target = None
+        wait_override = uia.get_operation_wait_override()
         if clear:
-            sleep(0.5 if loc is not None else 0.15)
+            clear_wait = (
+                (0.08 if loc is not None else 0.03)
+                if wait_override is not None
+                else (0.5 if loc is not None else 0.15)
+            )
+            sleep(clear_wait)
             target = self._focused_control()
             notes.append(self._clear_field(target))
         # Per-key SendKeys for short text (so escape sequences keep working);
@@ -911,9 +935,11 @@ class Desktop:
         else:
             # Bump interval from 0.02 → 0.04. Keeps short-text speed acceptable
             # while reducing key-loss; each character is a cancellation point.
-            for ch in text:
+            last_idx = len(text) - 1
+            for idx, ch in enumerate(text):
                 owner.checkpoint_current()
-                uia.SendKeys(_escape_text_for_sendkeys(ch), interval=0.04, waitTime=0.05)
+                char_wait = 0.0 if (wait_override is not None and idx < last_idx) else 0.05
+                uia.SendKeys(_escape_text_for_sendkeys(ch), interval=0.04, waitTime=char_wait)
                 owner.record_step_current()
         if clear or text:
             notes.append(self._read_back(target, text, clear, has_control_chars))
@@ -1182,14 +1208,14 @@ class Desktop:
             case "vertical":
                 match direction:
                     case "up":
-                        for _ in range(wheel_times):
+                        for i in range(wheel_times):
                             owner.checkpoint_current()
-                            uia.WheelUp(1)
+                            uia.WheelUp(1, waitTime=0.02 if i < wheel_times - 1 else None)
                             owner.record_step_current()
                     case "down":
-                        for _ in range(wheel_times):
+                        for i in range(wheel_times):
                             owner.checkpoint_current()
-                            uia.WheelDown(1)
+                            uia.WheelDown(1, waitTime=0.02 if i < wheel_times - 1 else None)
                             owner.record_step_current()
             case "horizontal":
                 match direction:
@@ -1201,9 +1227,9 @@ class Desktop:
                                 lambda: uia.ReleaseKey(uia.Keys.VK_SHIFT, waitTime=0.05),
                                 lambda: owner.physical_key_down(uia.Keys.VK_SHIFT),
                             )
-                            for _ in range(wheel_times):
+                            for i in range(wheel_times):
                                 owner.checkpoint_current()
-                                uia.WheelUp(1)
+                                uia.WheelUp(1, waitTime=0.02 if i < wheel_times - 1 else None)
                                 owner.record_step_current()
                         finally:
                             owner.input_ledger.release("key:shift")
@@ -1215,9 +1241,9 @@ class Desktop:
                                 lambda: uia.ReleaseKey(uia.Keys.VK_SHIFT, waitTime=0.05),
                                 lambda: owner.physical_key_down(uia.Keys.VK_SHIFT),
                             )
-                            for _ in range(wheel_times):
+                            for i in range(wheel_times):
                                 owner.checkpoint_current()
-                                uia.WheelDown(1)
+                                uia.WheelDown(1, waitTime=0.02 if i < wheel_times - 1 else None)
                                 owner.record_step_current()
                         finally:
                             owner.input_ledger.release("key:shift")
@@ -1264,7 +1290,7 @@ class Desktop:
             self._validate_screen_point(*normalized_from_loc)
         self._validate_screen_point(x, y)
         owner.checkpoint_current()
-        sleep(0.5)
+        sleep(0.05 if uia.get_operation_wait_override() is not None else 0.5)
         owner.checkpoint_current()
         if normalized_from_loc is None:
             cx, cy = uia.GetCursorPos()

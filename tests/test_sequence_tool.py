@@ -393,3 +393,83 @@ def test_wait_for_active_window_uses_fast_desktop_title_helper() -> None:
     assert "无标题 - Notepad" in result[0]
 
 
+def test_sequence_applies_and_restores_fast_operation_wait_override(monkeypatch) -> None:
+    from windows_mcp import uia
+    from windows_mcp.desktop import service as desktop_service
+
+    sleeps: list[float] = []
+    seen_overrides: list[float | None] = []
+    monkeypatch.setattr(uia.time, "sleep", lambda sec: sleeps.append(sec))
+    monkeypatch.setattr(uia, "SetCursorPos", lambda _x, _y: None)
+    monkeypatch.setattr(uia, "AbsoluteMouseEvent", lambda *_a: None)
+    monkeypatch.setattr(uia, "mouse_event", lambda *_a: None)
+    monkeypatch.setattr(desktop_service, "sleep", lambda sec: sleeps.append(sec))
+    monkeypatch.setattr(desktop_service.uia, "GetVirtualScreenRect", lambda: (0, 0, 1920, 1080))
+
+    desktop = Desktop.__new__(Desktop)
+    monkeypatch.setattr(desktop, "_modal_dialog_warning", lambda _x, _y: "")
+
+    orig_click = desktop.click
+
+    def spy_click(**kwargs):
+        seen_overrides.append(uia.get_operation_wait_override())
+        return orig_click(**kwargs)
+
+    monkeypatch.setattr(desktop, "click", spy_click)
+
+    seq = _register_seq(desktop)
+    assert uia.get_operation_wait_override() is None
+    asyncio.run(
+        seq(
+            steps=[
+                {"action": "click", "loc": [100, 100]},
+                {"action": "scroll", "direction": "down", "wheel_times": 4},
+            ],
+            final_capture="none",
+        )
+    )
+    assert uia.get_operation_wait_override() is None
+    assert seen_overrides == [0.05]
+    # Click post-wait should be 0.05 (not 0.5) and intermediate scroll ticks 0.02 (not 0.5).
+    assert 0.5 not in sleeps
+
+
+def test_sequence_release_after_releases_control_on_success_and_error(monkeypatch) -> None:
+    controller = MagicMock()
+    monkeypatch.setattr("windows_mcp.tools.sequence.get_controller", lambda: controller)
+
+    desktop = MagicMock()
+    seq = _register_seq(desktop)
+
+    asyncio.run(
+        seq(
+            steps=[{"action": "shortcut", "shortcut": "ctrl+t"}],
+            final_capture="none",
+        )
+    )
+    controller.release.assert_not_called()
+
+    asyncio.run(
+        seq(
+            steps=[{"action": "shortcut", "shortcut": "ctrl+t"}],
+            final_capture="none",
+            release_after="true",
+        )
+    )
+    controller.release.assert_called_once()
+
+    controller.release.reset_mock()
+    desktop.shortcut.side_effect = RuntimeError("boom")
+    with pytest.raises(RuntimeError, match="Sequence stopped at step 1/1"):
+        asyncio.run(
+            seq(
+                steps=[{"action": "shortcut", "shortcut": "ctrl+t"}],
+                final_capture="none",
+                release_after=True,
+            )
+        )
+    controller.release.assert_called_once()
+
+
+
+

@@ -80,6 +80,7 @@ def capture_desktop_state(
     display: list[int] | None,
     region: list[int] | None,
     tool_name: str,
+    active_window_only: bool = False,
 ):
     profile_enabled = _snapshot_profile_enabled()
     profile_started_at = time.perf_counter()
@@ -108,6 +109,7 @@ def capture_desktop_state(
         display_indices=display_indices,
         region=region,
         max_image_size=Size(width=MAX_IMAGE_WIDTH, height=MAX_IMAGE_HEIGHT),
+        **({"active_window_only": True} if active_window_only else {}),
     )
     if profile_enabled:
         desktop_state_ms = (time.perf_counter() - stage_started_at) * 1000
@@ -162,6 +164,7 @@ def capture_desktop_state(
         "all_desktops": all_desktops,
         "screenshot_bytes": screenshot_bytes,
         "use_ui_tree": use_ui_tree,
+        "active_window_only": active_window_only,
     }
 
 
@@ -259,6 +262,10 @@ def build_snapshot_response(
                 "UI Tree Scope: Region-filtered. Windows and UI elements outside this region "
                 "are omitted. Omit region and display to inspect the full desktop.\n"
             )
+    if capture_result.get("active_window_only") and include_ui_details and capture_result["use_ui_tree"]:
+        metadata_text += (
+            "UI Tree Scope: Active window only (background windows and taskbar omitted).\n"
+        )
     if desktop_state.screenshot_backend:
         metadata_text += f"Screenshot Backend: {desktop_state.screenshot_backend}\n"
     if saved_path:
